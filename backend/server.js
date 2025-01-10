@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const setUpMiddleWare = require('./config/middleware');
+const organizationRoutes = require('./routes/organizationRoutes')
+const authMiddleware = require('./middlewares/authMiddleware')
 
 dotenv.config();
 
@@ -29,7 +31,6 @@ const startServer = async () => {
     }
 };
 
-app.get('/', (req, res) => {
-    res.send('Server is up and running!');
-});
 startServer();
+
+app.use('/api/organization', organizationRoutes)
