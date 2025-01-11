@@ -234,4 +234,150 @@ const viewAllOrders = async (req, res) => {
     }
 }
 
-module.exports = { signUp, uploadOrders, upload, createOrder, viewAllOrders }
+//delete an order that is not delivered
+const deleteOrder = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        let orderId = req.params.orderId
+
+        orderId = new mongoose.Types.ObjectId(orderId)
+
+        const order = await orderModel.findOne({ _id: orderId, organizationId: req.user.id }, null, { session })
+
+        console.log(order)
+
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+
+        if (order.status === 'Delivered')
+            return res.status(400).json({ message: 'Order has already been delivered ' })
+
+        await orderModel.findByIdAndDelete(orderId, { session })
+        await session.commitTransaction();
+        return res.status(200).json({ message: 'Deleted order' })
+
+
+    }
+    catch (error) {
+        await session.abortTransaction();
+        console.log('Error while deleting:' + error.message)
+        return res.status(500).json({ message: 'Server error' })
+    }
+    finally {
+        session.endSession();
+    }
+}
+
+// update an order that has not been picked up yet
+const updateOrder = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+        if (!req.params.orderId)
+            throw new Error('Please include orderId')
+        const orderId = new mongoose.Types.ObjectId(req.params.orderId)
+        const order = await orderModel.findOne({ _id: orderId, organizationId: req.user.id }, null, { session })
+        if (!order)
+            return res.status(400).json({ message: 'Order not found' })
+
+        if (order.status !== 'Pending Pickup') {
+            return res.status(400).json({
+                message: 'Order cannot be updated in its current status.'
+            });
+        }
+
+        const { quantity, recipientName, recipientEmail, recipientAddress, recipientPhone, totalAmount, productDescription } = req.body;
+
+        const updates = {};
+
+
+        if (quantity) {
+            if (!Number.isInteger(quantity) || quantity <= 0) {
+                return res.status(400).json({ message: 'Invalid quantity. Quantity must be a positive integer.' });
+            }
+            updates.quantity = quantity;
+        }
+
+
+        if (recipientName) {
+            const sanitizedRecipientName = validator.escape(recipientName.trim());
+            updates.recipientName = sanitizedRecipientName;
+        }
+
+
+        if (recipientEmail) {
+            if (!validator.isEmail(recipientEmail)) {
+                return res.status(400).json({ message: 'Invalid email format.' });
+            }
+            updates.recipientEmail = recipientEmail;
+        }
+
+
+        if (recipientAddress) {
+            const sanitizedRecipientAddress = validator.escape(recipientAddress.trim());
+            updates.recipientAddress = sanitizedRecipientAddress;
+        }
+
+        if (recipientPhone) {
+            if (!validator.isMobilePhone(recipientPhone, 'ar-EG')) {
+                return res.status(400).json({ message: 'Invalid phone number format for Egypt.' });
+            }
+            updates.recipientPhone = recipientPhone;
+        }
+
+        if (totalAmount !== undefined) {
+            if (isNaN(totalAmount) || totalAmount <= 0) {
+                return res.status(400).json({ message: 'Invalid total amount. Total amount must be a positive number.' });
+            }
+            updates.totalAmount = totalAmount;
+        }
+
+        if (productDescription) {
+            const sanitizedProductDescription = validator.escape(productDescription.trim());
+            updates.productDescription = sanitizedProductDescription;
+        }
+
+
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ message: 'No valid fields provided for update.' });
+        }
+
+        await orderModel.findByIdAndUpdate(orderId, updates, { session })
+
+        await session.commitTransaction();
+        return res.status(200).json({ message: 'Updated order.' })
+
+    }
+    catch (error) {
+        await session.abortTransaction();
+        console.log('Error while updating:' + error.message)
+        return res.status(500).json({ message: 'Server error' })
+    }
+    finally {
+        session.endSession();
+    }
+}
+
+const viewPendingPickUpOrders = async (req, res) => {
+    try {
+        const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const orders = await orderModel.find({ organizationId: organization._id, status: 'Pending Pickup' }).select('-organizationId')
+
+        if (orders.length === 0)
+            return res.status(400).json({ message: 'No orders yet.' })
+
+        return res.status(200).json({ orders })
+    }
+    catch (error) {
+        console.log('Error while fetching orders:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
+
+module.exports = { signUp, uploadOrders, upload, createOrder, viewAllOrders, deleteOrder, updateOrder, viewPendingPickUpOrders }
