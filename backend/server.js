@@ -12,6 +12,7 @@ dotenv.config();
 // Create an express app
 const app = express();
 
+app.use(cors());
 // Setup middleware
 setUpMiddleWare(app);
 
