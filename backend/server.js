@@ -1,10 +1,10 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const setUpMiddleWare = require('./config/middleware');
 const organizationRoutes = require('./routes/organizationRoutes')
+const orderRoutes = require('./routes/orderRoutes')
 const authMiddleware = require('./middlewares/authMiddleware')
 
 dotenv.config();
@@ -39,3 +39,4 @@ const startServer = async () => {
 startServer();
 
 app.use('/api/organization', organizationRoutes)
+app.use('/api/order', authMiddleware(['organization']), orderRoutes)

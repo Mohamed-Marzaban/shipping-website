@@ -2,8 +2,6 @@ const mongoose = require("mongoose")
 const organizationModel = require('../models/organizationModel')
 const orderModel = require('../models/orderModel')
 const validator = require('validator');
-const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const storage = multer.memoryStorage();
@@ -16,7 +14,9 @@ const upload = multer({
         const allowedMimeTypes = [
             'application/vnd.ms-excel',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv', // Add this line to allow CSV files
         ];
+
 
         if (!allowedMimeTypes.includes(file.mimetype)) {
             req.fileValidationError = 'Only Excel files are allowed!';
@@ -27,62 +27,7 @@ const upload = multer({
 });
 
 
-const signUp = async (req, res) => {
-    try {
-        const { name, email, phone, password } = req.body
 
-        if (!name || !email || !phone || !password)
-            return res.status(400).json({ message: 'Please fill all required fields.' })
-
-        if (!validator.isEmail(email))
-            return res.status(400).json({ message: 'Invalid email format.' })
-
-        const existingOrganization = await organizationModel.findOne({ email })
-
-        if (existingOrganization)
-            return res.status(400).json({ message: 'Email is already registered.' });
-
-        if (!validator.isStrongPassword(password, {
-            minLength: 10,
-            minLowercase: 1,
-            minUppercase: 1,
-            minNumbers: 1,
-            minSymbols: 1,
-        }))
-            return res.status(400).json({ message: 'Please choose a stronger password.' })
-
-        const hashedPassword = await bcrypt.hash(password, 10)
-
-        const organization = new organizationModel({
-            name,
-            email,
-            phone,
-            password: hashedPassword
-        })
-
-        await organization.save()
-
-        const token = jwt.sign(
-            { id: organization._id, role: 'organization' },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
-        );
-        res.cookie('authToken', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 24 * 60 * 60 * 1000,
-        });
-
-        return res.status(201).json({ message: 'Signed up successfully' })
-
-    }
-    catch (error) {
-        console.log('Error while signing up:' + error.message)
-        return res.status(500).json({ message: 'Server error' })
-
-    }
-}
 
 
 function validateFields(recipientEmail, recipientPhone, quantity, totalAmount, paymentMethod, index) {
@@ -91,7 +36,7 @@ function validateFields(recipientEmail, recipientPhone, quantity, totalAmount, p
     if (!validator.isEmail(recipientEmail)) {
         throw new Error(`Incorrect email format${rowMessage}`);
     }
-    if (!validator.isMobilePhone(recipientPhone, 'ar-EG')) {
+    if (!validator.isMobilePhone(String(recipientPhone), 'ar-EG')) {
         throw new Error(`Invalid phone number format${rowMessage}`);
     }
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -135,6 +80,7 @@ const uploadOrders = async (req, res) => {
             return res.status(400).json({ message: 'The uploaded file is empty.' });
         }
 
+        console.log(data)
         const ordersToInsert = data.map((row, index) => {
             if (!row.recipientName || !row.recipientPhone || !row.recipientAddress || !row.productDescription || !row.quantity || !row.totalAmount || !row.paymentMethod) {
                 throw new Error(`Missing required fields in row ${index + 1}`);
@@ -380,4 +326,45 @@ const viewPendingPickUpOrders = async (req, res) => {
     }
 }
 
-module.exports = { signUp, uploadOrders, upload, createOrder, viewAllOrders, deleteOrder, updateOrder, viewPendingPickUpOrders }
+const viewDeliveredOrders = async (req, res) => {
+    try {
+        const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const orders = await orderModel.find({ organizationId: organization._id, status: 'Delivered' }).select('-organizationId')
+
+        if (orders.length === 0)
+            return res.status(400).json({ message: 'No orders yet.' })
+
+        return res.status(200).json({ orders })
+    }
+    catch (error) {
+        console.log('Error while fetching orders:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
+const viewOutForDeliveryOrders = async (req, res) => {
+    try {
+        const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const orders = await orderModel.find({ organizationId: organization._id, status: 'Out for Delivery' }).select('-organizationId')
+
+        if (orders.length === 0)
+            return res.status(400).json({ message: 'No orders yet.' })
+
+        return res.status(200).json({ orders })
+    }
+    catch (error) {
+        console.log('Error while fetching orders:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
+
+
+
+module.exports = { uploadOrders, upload, createOrder, viewAllOrders, deleteOrder, updateOrder, viewPendingPickUpOrders, viewDeliveredOrders, viewOutForDeliveryOrders }
