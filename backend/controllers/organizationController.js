@@ -1,3 +1,4 @@
+const mongoose = require("mongoose")
 const organizationModel = require('../models/organizationModel')
 const orderModel = require('../models/orderModel')
 const validator = require('validator');
@@ -8,10 +9,13 @@ const XLSX = require('xlsx');
 const storage = multer.memoryStorage();
 const upload = multer({
     storage,
+    limits: {
+        fileSize: 2 * 1024 * 1024,
+    },
     fileFilter: (req, file, cb) => {
         const allowedMimeTypes = [
-            'application/vnd.ms-excel', // .xls
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ];
 
         if (!allowedMimeTypes.includes(file.mimetype)) {
@@ -81,8 +85,32 @@ const signUp = async (req, res) => {
 }
 
 
+function validateFields(recipientEmail, recipientPhone, quantity, totalAmount, paymentMethod, index) {
+    const rowMessage = index === -1 ? '' : ` in row ${index + 1}`;
+
+    if (!validator.isEmail(recipientEmail)) {
+        throw new Error(`Incorrect email format${rowMessage}`);
+    }
+    if (!validator.isMobilePhone(recipientPhone, 'ar-EG')) {
+        throw new Error(`Invalid phone number format${rowMessage}`);
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error(`Invalid quantity${rowMessage}. Quantity must be a positive integer.`);
+    }
+    if (isNaN(totalAmount) || totalAmount <= 0) {
+        throw new Error(`Invalid total amount${rowMessage}. Total amount must be a positive number.`);
+    }
+    const validPaymentMethods = ['COD', 'Card'];
+    if (!validPaymentMethods.includes(paymentMethod)) {
+        throw new Error(`Invalid payment method${rowMessage}. Allowed values: ${validPaymentMethods.join(', ')}`);
+    }
+}
+
+
 
 const uploadOrders = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try {
         if (req.fileValidationError) {
             return res.status(400).json({ message: req.fileValidationError }); // Respond with validation error
@@ -92,6 +120,9 @@ const uploadOrders = async (req, res) => {
         }
 
         const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: organization not found' })
 
         const buffer = req.file.buffer;
         const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -105,33 +136,102 @@ const uploadOrders = async (req, res) => {
         }
 
         const ordersToInsert = data.map((row, index) => {
-            if (!row.recipientName || !row.recipientPhone || !row.recipientAddress || !row.productDescription) {
+            if (!row.recipientName || !row.recipientPhone || !row.recipientAddress || !row.productDescription || !row.quantity || !row.totalAmount || !row.paymentMethod) {
                 throw new Error(`Missing required fields in row ${index + 1}`);
             }
 
-            if (!validator.isEmail(row.recipientEmail))
-                throw new Error(`Incorrect email format in row ${index + 1}`);
+            validateFields(row.recipientEmail, row.recipientPhone, row.quantity, row.totalAmount, row.paymentMethod, index)
+
+            const sanitizedRecipientName = validator.escape(row.recipientName.trim());
+            const sanitizedRecipientAddress = validator.escape(row.recipientAddress.trim());
+            const sanitizedProductDescription = validator.escape(row.productDescription.trim());
             return {
                 organizationName: organization.name,
-                status: row.status || 'Pending Pickup',
                 paymentMethod: row.paymentMethod || 'COD',
                 quantity: row.quantity || 1,
                 totalAmount: row.totalAmount,
-                productDescription: row.productDescription,
-                recipientName: row.recipientName,
+                productDescription: sanitizedProductDescription,
+                recipientName: sanitizedRecipientName,
                 recipientEmail: row.recipientEmail || '',
                 recipientPhone: row.recipientPhone,
-                recipientAddress: row.recipientAddress
+                recipientAddress: sanitizedRecipientAddress,
+                organizationId: organization._id
             };
         })
 
-        await orderModel.insertMany(ordersToInsert);
+        await orderModel.insertMany(ordersToInsert, { session });
+        await session.commitTransaction();
         return res.status(200).json({ message: 'Orders processed successfully' });
     } catch (error) {
+        await session.abortTransaction();
         console.error('Error processing orders:', error);
         return res.status(500).json({ message: 'Error processing orders:' + ' ' + error.message });
+    }
+    finally {
+        session.endSession();
     }
 };
 
 
-module.exports = { signUp, uploadOrders, upload }
+const createOrder = async (req, res) => {
+    try {
+        const organizationId = req.user.id
+        const organization = await organizationModel.findById(organizationId)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const { recipientName, recipientPhone, recipientEmail, recipientAddress, productDescription, paymentMethod, quantity, totalAmount } = req.body;
+
+        if (!recipientName || !recipientPhone || !recipientEmail || !recipientAddress || !productDescription || !paymentMethod || !quantity || !totalAmount)
+            return res.status(400).json({ message: 'Please fill all required fields' })
+
+        validateFields(recipientEmail, recipientPhone, quantity, totalAmount, paymentMethod, -1);
+
+        const sanitizedRecipientName = validator.escape(recipientName.trim());
+        const sanitizedRecipientAddress = validator.escape(recipientAddress.trim());
+        const sanitizedProductDescription = validator.escape(productDescription.trim());
+
+        const order = new orderModel({
+            organizationName: organization.name,
+            paymentMethod: paymentMethod || 'COD',
+            quantity: quantity || 1,
+            totalAmount: totalAmount,
+            productDescription: sanitizedProductDescription,
+            recipientName: sanitizedRecipientName,
+            recipientEmail: recipientEmail || '',
+            recipientPhone: recipientPhone,
+            recipientAddress: sanitizedRecipientAddress,
+            organizationId: organization._id
+        })
+
+        await order.save()
+        return res.status(201).json({ message: 'Created order succesfully' })
+    }
+    catch (error) {
+        console.log('Error while creating order:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
+
+const viewAllOrders = async (req, res) => {
+    try {
+        const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const orders = await orderModel.find({ organizationId: organization._id }).select('-organizationId')
+
+        if (orders.length === 0)
+            return res.status(400).json({ message: 'No orders yet.' })
+
+        return res.status(200).json({ orders })
+    }
+    catch (error) {
+        console.log('Error while fetching orders:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
+
+module.exports = { signUp, uploadOrders, upload, createOrder, viewAllOrders }

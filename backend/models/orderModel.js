@@ -53,6 +53,10 @@ const orderSchema = new mongoose.Schema({
     organizationName: {
         type: String,
         required: true
+    },
+    organizationId: {
+        type: mongoose.Types.ObjectId,
+        ref: 'Organization'
     }
 
 }, { timestamps: true })
