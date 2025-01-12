@@ -11,6 +11,7 @@ router.get('/orders', orderController.viewAllOrders)
 router.get('/pending-orders', orderController.viewPendingPickUpOrders)
 router.get('/delivered-orders', orderController.viewDeliveredOrders)
 router.get('/OFD-orders', orderController.viewOutForDeliveryOrders)
+router.get('/OFD-orders', orderController.viewRefundedOrders)
 router.delete('/order/:orderId', orderController.deleteOrder)
 router.patch('/order/:orderId', orderController.updateOrder)
 

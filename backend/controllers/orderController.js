@@ -365,6 +365,25 @@ const viewOutForDeliveryOrders = async (req, res) => {
     }
 }
 
+const viewRefundedOrders = async (req, res) => {
+    try {
+        const organization = await organizationModel.findById(req.user.id)
+
+        if (!organization)
+            return res.status(403).json({ message: 'Unauthorized: Organization not found' })
+
+        const orders = await orderModel.find({ organizationId: organization._id, status: 'Refunded' }).select('-organizationId')
+
+        if (orders.length === 0)
+            return res.status(400).json({ message: 'No orders yet.' })
+
+        return res.status(200).json({ orders })
+    }
+    catch (error) {
+        console.log('Error while fetching orders:' + error.message)
+        return res.status(500).json({ message: 'Server Error' })
+    }
+}
 
 
-module.exports = { uploadOrders, upload, createOrder, viewAllOrders, deleteOrder, updateOrder, viewPendingPickUpOrders, viewDeliveredOrders, viewOutForDeliveryOrders }
+module.exports = { uploadOrders, upload, createOrder, viewAllOrders, deleteOrder, updateOrder, viewPendingPickUpOrders, viewDeliveredOrders, viewOutForDeliveryOrders, viewRefundedOrders }

@@ -16,7 +16,7 @@ const orderSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Delivered', 'Out for Delivery', 'Pending Pickup'],
+        enum: ['Delivered', 'Out for Delivery', 'Pending Pickup', 'Refunded'],
         default: 'Pending Pickup',
         required: true
     },
