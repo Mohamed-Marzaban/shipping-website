@@ -43,7 +43,14 @@ export default function Header() {
           >
             Log in
           </Link>
-          <Button>Sign up</Button>
+          <Button>
+            <Link
+              href="/signup"
+              className="text-sm font-semibold leading-6 text-white"
+            >
+              Sign Up
+            </Link>
+          </Button>
         </div>
       </nav>
     </header>

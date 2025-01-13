@@ -3,18 +3,72 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { useRouter } from 'next/navigation'
+
+// Define types for API response
+interface LoginResponse {
+  success: boolean
+  token?: string
+  message?: string
+  user?: {
+    id: string
+    email: string
+    // Add other user fields as needed
+  }
+}
 
 export default function LoginPage() {
+  const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   })
+  const [error, setError] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle login logic here
-    console.log('Login data:', formData)
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const response = await fetch(
+        'http://localhost:4000/api/organization/login',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // Include cookies if your API uses them
+          body: JSON.stringify(formData),
+        }
+      )
+
+      const data: LoginResponse = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to login')
+      }
+
+      if (data.success && data.token) {
+        // Store the token in localStorage
+        localStorage.setItem('token', data.token)
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user))
+        }
+        // Redirect to dashboard
+        router.push('/dashboard')
+      } else {
+        setError('Invalid credentials')
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'An error occurred during login'
+      )
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -34,6 +88,30 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-red-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>
@@ -117,8 +195,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full">
-            Sign in
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
       </div>

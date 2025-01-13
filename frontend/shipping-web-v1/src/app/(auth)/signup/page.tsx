@@ -50,6 +50,18 @@ export default function SignUpPage() {
   }
   const [isLoading, setIsLoading] = useState(false)
   const [apiError, setApiError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+  const validatePhoneNumber = (phone: string) => {
+    // Remove any non-digit characters
+    const cleanPhone = phone.replace(/\D/g, '')
+
+    // Check if it's a valid length (10 digits for US numbers)
+    if (cleanPhone.length !== 11) {
+      return 'Phone number must be 11 digits'
+    }
+
+    // Check if it matches US phone format
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,29 +69,33 @@ export default function SignUpPage() {
     // Clear any previous errors
     setApiError('')
 
-    // Validate passwords
+    // Validate passwords and phone
     if (!validatePasswords()) {
+      return
+    }
+
+    const phoneError = validatePhoneNumber(formData.phone)
+    if (phoneError) {
+      setPhoneError(phoneError)
       return
     }
 
     try {
       setIsLoading(true)
       const response = await signUpUser(formData)
-
-      console.log('Signup successful:', response)
+      // ... rest of your submit logic
     } catch (error) {
-      if (error instanceof Error) {
-        setApiError(error.message || 'Failed to sign up. Please try again.')
-      } else {
-        setApiError('Failed to sign up. Please try again.')
-      }
+      setApiError(
+        (error as any).message || 'Failed to sign up. Please try again.'
+      )
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    /* Changed from min-h-screen flex */
+    <div className="flex-1 flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
@@ -164,13 +180,21 @@ export default function SignUpPage() {
                 type="tel"
                 autoComplete="tel"
                 required
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                className={`mt-1 block w-full rounded-md border ${
+                  phoneError ? 'border-red-500' : 'border-gray-300'
+                } px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm`}
                 value={formData.phone}
-                onChange={(e) =>
-                  setFormData({ ...formData, phone: e.target.value })
-                }
-                placeholder="(123) 456-7890"
+                onChange={(e) => {
+                  const newPhone = e.target.value
+                  setFormData({ ...formData, phone: newPhone })
+                  const error = validatePhoneNumber(newPhone)
+                  setPhoneError(error || '')
+                }}
+                placeholder="01000000000"
               />
+              {phoneError && (
+                <p className="mt-1 text-sm text-red-600">{phoneError}</p>
+              )}
             </div>
             <div>
               <label
