@@ -7,17 +7,75 @@ import { Button } from '@/components/ui/Button'
 export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+    name: '',
+
     email: '',
     password: '',
-    companyName: '',
+    confirmPassword: '',
+
+    phone: '',
   })
+  const [passwordError, setPasswordError] = useState('')
+  const validatePasswords = () => {
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordError('Passwords do not match')
+      return false
+    }
+    setPasswordError('')
+    return true
+  }
+  const signUpUser = async (userData: typeof formData) => {
+    try {
+      const response = await fetch(
+        'http://localhost:4000/api/organization/sign-up',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userData),
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Sign up failed')
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      throw error
+    }
+  }
+  const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle signup logic here
-    console.log('Signup data:', formData)
+
+    // Clear any previous errors
+    setApiError('')
+
+    // Validate passwords
+    if (!validatePasswords()) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      const response = await signUpUser(formData)
+
+      console.log('Signup successful:', response)
+    } catch (error) {
+      if (error instanceof Error) {
+        setApiError(error.message || 'Failed to sign up. Please try again.')
+      } else {
+        setApiError('Failed to sign up. Please try again.')
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -37,67 +95,41 @@ export default function SignUpPage() {
             </Link>
           </p>
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label
-                  htmlFor="firstName"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  First name
-                </label>
-                <input
-                  id="firstName"
-                  name="firstName"
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="lastName"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Last name
-                </label>
-                <input
-                  id="lastName"
-                  name="lastName"
-                  type="text"
-                  required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
-                />
+          {apiError && (
+            <div className="rounded-md bg-red-50 p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    {apiError}
+                  </h3>
+                </div>
               </div>
             </div>
+          )}
+
+          <div className="rounded-md shadow-sm space-y-4">
             <div>
               <label
-                htmlFor="companyName"
+                htmlFor="firstName"
                 className="block text-sm font-medium text-gray-700"
               >
-                Company name
+                Name
               </label>
               <input
-                id="companyName"
-                name="companyName"
+                id="name"
+                name="name"
                 type="text"
                 required
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                value={formData.companyName}
+                value={formData.name}
                 onChange={(e) =>
-                  setFormData({ ...formData, companyName: e.target.value })
+                  setFormData({ ...formData, name: e.target.value })
                 }
               />
             </div>
+
             <div>
               <label
                 htmlFor="email"
@@ -118,6 +150,28 @@ export default function SignUpPage() {
                 }
               />
             </div>
+            {/* Add this block after the email input div */}
+            <div>
+              <label
+                htmlFor="phone"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Phone number
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                required
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+                placeholder="(123) 456-7890"
+              />
+            </div>
             <div>
               <label
                 htmlFor="password"
@@ -132,11 +186,22 @@ export default function SignUpPage() {
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                  className={`mt-1 block w-full rounded-md border ${
+                    passwordError ? 'border-red-500' : 'border-gray-300'
+                  } px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm`}
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newPassword = e.target.value
+                    setFormData({ ...formData, password: newPassword })
+                    if (
+                      newPassword !== formData.confirmPassword &&
+                      formData.confirmPassword
+                    ) {
+                      setPasswordError('Passwords do not match')
+                    } else {
+                      setPasswordError('')
+                    }
+                  }}
                 />
                 <button
                   type="button"
@@ -151,10 +216,60 @@ export default function SignUpPage() {
                 </button>
               </div>
             </div>
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  className={`mt-1 block w-full rounded-md border ${
+                    passwordError ? 'border-red-500' : 'border-gray-300'
+                  } px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm`}
+                  value={formData.confirmPassword}
+                  onChange={(e) => {
+                    setFormData({
+                      ...formData,
+                      confirmPassword: e.target.value,
+                    })
+                    if (e.target.value !== formData.password) {
+                      setPasswordError('Passwords do not match')
+                    } else {
+                      setPasswordError('')
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              {passwordError && (
+                <p className="mt-1 text-sm text-red-600">{passwordError}</p>
+              )}
+            </div>
           </div>
 
-          <Button type="submit" className="w-full">
-            Create account
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={isLoading || !!passwordError}
+          >
+            {isLoading ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
       </div>
