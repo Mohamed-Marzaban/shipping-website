@@ -26,7 +26,10 @@ const signUp = async (req, res) => {
             minNumbers: 1,
             minSymbols: 1,
         }))
-            return res.status(400).json({ message: 'Please choose a stronger password.' })
+            if (!validator.isMobilePhone(String(phone), 'ar-EG')) {
+                return res.status(400).json({ message: 'Invalid mobile format' })
+            }
+        return res.status(400).json({ message: 'Please choose a stronger password.' })
 
         const hashedPassword = await bcrypt.hash(password, 10)
 
